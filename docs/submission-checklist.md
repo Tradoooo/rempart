@@ -140,6 +140,19 @@ final checks).
    publish.
 5. **Date gate** — do not run the first pentest before **23 November 2026** so
    the two-month trial still covers judging on 22 January 2027.
+6. **Share the repository with the jury (owner, at submission time)** — the
+   regulation requires a **private** repo shared with the two judge accounts:
+   1. `gh repo edit Tradoooo/rempart --visibility private
+      --accept-visibility-change-consequences` (owner only — the working
+      account is not admin; check the GitHub Pages precondition first, see
+      item 4 of the table above);
+   2. **Settings → Collaborators → Add people** → `testing@devpost.com`, then
+      `aws-msp@amazon.com`, permission **Read** (the REST API invites by
+      username, not by e-mail — use the web UI);
+   3. verify: `gh api repos/Tradoooo/rempart/collaborators --jq '.[].login'`.
+   Until both are done, requirement 4 of the table above stays unmet and
+   `bash scripts/submission_check.sh` keeps failing on the "private repo"
+   check.
 
 **Hard stop:** no `StartPentestJob`—directly or through the run API—until item 1
 is complete and `free_tier_confirmed` is explicitly set for the target tenant.
