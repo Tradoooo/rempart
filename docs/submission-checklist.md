@@ -32,7 +32,7 @@ stays enabled.**
 | 1 | Track 2 selected, AWS AI service named | **to do** (form) | Text ready: [`devpost-submission.md`](devpost-submission.md). Service to name: AWS Continuum (penetration testing) + Amazon Bedrock via Strands Agents on AgentCore Runtime. |
 | 2 | Description in English: features, problem, measured outcomes | **done** | [`devpost-submission.md`](devpost-submission.md) § Description, How we built it, three measured outcomes. |
 | 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | GitHub Pages remains the free judging demo: https://tradoooo.github.io/rempart/. The AWS-backed portal is online at https://d1o2xnfrq8xomh.cloudfront.net and the API is online at https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com. Cognito is **active** with authorization-code + PKCE; the hosted domain and callback configuration are recorded in [`portal-deployment.md`](portal-deployment.md). Keep public judging on the frozen, offline dataset; do not expose customer data. |
-| 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decision needed** | The repository is currently **public** (it was created private; the visibility changed outside this work). The specification asks for a *private* repo shared with the two judge accounts. A public repo is generally accepted by Devpost, but it exposes the French specification — commercial strategy, pricing hypotheses, schedule. **Your call**: keep it public, or set it back to private (GitHub Pages keeps working on a Pro plan) and invite the judge accounts at submission time. |
+| 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decided: private** — owner action at submission | The decision is made (15 November 2026): the repository goes back to **private** and the two judge accounts are invited at submission time. **Only the owner (`Tradoooo`) can do this** — the working account (`GaiaSG94`) has `push` but not `admin`, and the invitations API answered 403 on 15/11. Before switching: (1) confirm the owner's plan keeps **GitHub Pages serving `tradoooo.github.io/rempart` from a private repo** (on a personal account this needs a paid plan); if Pages stops, repoint every public link to the frozen demo already served on CloudFront — https://d1o2xnfrq8xomh.cloudfront.net — and update README, `judging-test-instructions.md`, `devpost-submission.md` and `scripts/submission_check.sh`. (2) Run the secret scan in `docs/preuves/` before the switch (done 15/11: no key, no password, no ExternalId; one **real AWS account ID `710332178565`** appears in docs/tests/scripts — low sensitivity, stays in history unless the owner rewrites it). The step-by-step invitation procedure is at the bottom of this file. |
 | 5 | The code really calls an AWS AI service at runtime | **blocked until 23 Nov** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)). The first real `StartPentestJob` is reserved for **23 November 2026** and is forbidden until the customer account's free-trial eligibility has been checked in Billing and Continuum, recorded in the run evidence, and confirmed for the tenant. Follow [`runbook-premier-test.md`](runbook-premier-test.md) and [issue #36](https://github.com/Tradoooo/rempart/issues/36); if eligibility is absent or ambiguous, use the frozen demo and do not start a job. |
 | 6 | Video ~3 minutes, public on YouTube, English, no third-party brand or music | **out of scope for the agent** | Script written and timed: [`video-script.md`](video-script.md). The user records and edits. |
 | 7 | Architecture diagram | **done** | Mermaid diagrams in [`HLD.md`](HLD.md) (control plane + customer account) and in [`README.md`](../README.md); sequence diagram of a delivery and finding lifecycle state diagram in the specification § 11.4-11.5. |
@@ -76,20 +76,51 @@ stays enabled.**
 
 | Test windows (EF-ORC-08) | **done** | `Application.test_windows` + `orchestrator/windows.py::is_within_window` (pure, injectable, handles windows crossing midnight). A **full** test on **production** outside an agreed window is refused with `outside_test_window` and audited; `delivery` (CI/CD gate) tests and staging are never blocked — blocking a release cannot wait for a window. |
 
-## Command for item 4 (run at submission time)
+## Item 4 — making the repo private and inviting the judges (owner, at submission time)
 
-```bash
-gh api repos/Tradoooo/rempart/collaborators/testing-devpost \
-  -X PUT -f permission=pull
-gh api repos/Tradoooo/rempart/collaborators/aws-msp \
-  -X PUT -f permission=pull
-```
+The REST API of a **personal** repository invites a collaborator **by
+username**, not by e-mail — and the judge accounts are published as e-mail
+addresses. So the invitations are done in the web interface, by the **owner
+(`Tradoooo`)**, **at submission time** (not before: the repo must stay public
+for GitHub Pages until we are ready, and the judges must not hit a 404 during
+final checks).
 
-Replace the login names with the accounts Devpost and AWS actually publish in
-the hackathon FAQ — the specification quotes the **email addresses**
-(`testing@devpost.com`, `aws-msp@amazon.com`), and GitHub invites a collaborator
-by username, not by email. Confirm the exact usernames on
-https://aws-agentic-msp.devpost.com/ before running this.
+1. **Visibility** (owner, terminal, one command):
+
+   ```bash
+   gh repo edit Tradoooo/rempart --visibility private --accept-visibility-change-consequences
+   ```
+
+   *Preconditions checked 15/11:* (a) the working account is **not admin**
+   (`gh api repos/Tradoooo/rempart --jq .permissions` → `"admin": false`), so
+   only the owner can run it; (b) GitHub Pages keeps serving a public site
+   from a private repo only on a **paid** plan — the owner must confirm the
+   plan **before** running the command, otherwise
+   https://tradoooo.github.io/rempart/ goes dark. Fallback, ready and already
+   deployed: serve the frozen demo from the existing CloudFront distribution
+   (https://d1o2xnfrq8xomh.cloudfront.net) and update the links in README,
+   `judging-test-instructions.md`, `devpost-submission.md` and
+   `scripts/submission_check.sh`.
+
+2. **Invitations** (owner, web UI): **Settings → Collaborators → Add people**,
+   type the e-mail address, choose **Read** access, then **Add**:
+
+   - `testing@devpost.com`
+   - `aws-msp@amazon.com`
+
+   Each collaborator receives an invitation e-mail; on a personal private
+   repo, seats count against the owner's plan. Keep the permission at
+   **Read** — the judges must never need write access.
+
+3. **Verify** after both accept:
+
+   ```bash
+   gh api repos/Tradoooo/rempart/collaborators --jq '.[].login'
+   ```
+
+   If the addresses correspond to real GitHub accounts, also note the matching
+   usernames from the hackathon FAQ (https://aws-agentic-msp.devpost.com/)
+   before submission.
 
 ## Blockers, in the order they must be cleared
 
