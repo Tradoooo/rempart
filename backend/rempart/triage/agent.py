@@ -6,8 +6,9 @@ import logging
 from typing import Any
 
 from rempart.common.models import Application, Decision, Finding
+from rempart.common.usage import accumulated_usage
 
-from . import llm, verdict_cache
+from . import llm, llm_budget, verdict_cache
 from .guardrails import HIGH_SEVERITIES, compute_finding_priority, enforce
 from .memory import MemoryMatch, memory_match
 from .prompts import SYSTEM_PROMPT, format_finding_for_prompt
@@ -213,6 +214,9 @@ def _run_strands_agent(ctx: TriageContext, model_client: Any) -> list[TriageProp
         f"then call tool_submit_triage_proposal for each finding.\n\n{formatted_findings}"
     )
     agent(prompt)
+    # Jetons réellement consommés : ils alimentent le plafond budgétaire du
+    # mois (`triage/llm_budget.py`), mesurés et jamais estimés.
+    llm_budget.record_usage(accumulated_usage(agent))
     return list(ctx.proposals)
 
 

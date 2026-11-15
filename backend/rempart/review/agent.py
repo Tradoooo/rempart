@@ -26,6 +26,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from rempart.common.usage import accumulated_usage as read_accumulated_usage
 from rempart.triage import llm, verdict_cache
 
 from .comments import ReviewComment
@@ -180,21 +181,7 @@ def accumulated_usage(agent: Any) -> dict[str, int]:
     systématiquement ``None``, ce qui faisait disparaître silencieusement les
     tokens mesurés.
     """
-    metrics = getattr(agent, "event_loop_metrics", None)
-    usage = getattr(metrics, "accumulated_usage", None)
-    if not isinstance(usage, dict):
-        return {}
-    return {
-        key: value
-        for key in (
-            "inputTokens",
-            "outputTokens",
-            "totalTokens",
-            "cacheReadInputTokens",
-            "cacheWriteInputTokens",
-        )
-        if isinstance((value := usage.get(key)), int)
-    }
+    return read_accumulated_usage(agent)
 
 
 def _cache_key(diff: DiffSource) -> list[str]:

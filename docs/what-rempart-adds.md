@@ -91,7 +91,7 @@ that this application is internet-facing, handles payment data, belongs to a
 customer who signed a 7-day remediation clause, or that this finding is the same
 one the analyst dismissed last month.
 
-**Rempart** — a Strands agent on AgentCore Runtime with Bedrock deduplicates
+**Rempart** — a Strands agent backed by Amazon Bedrock deduplicates
 findings described differently, writes a three-sentence summary for a
 non-specialist, and proposes a status. Then **code takes back control**:
 

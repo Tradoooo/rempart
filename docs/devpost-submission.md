@@ -33,16 +33,25 @@ everything around it: automated onboarding, budget governance, contextual
 triage, a contractual remediation deadline, tracking to proven closure, and
 reporting to the customer's leadership.
 
-**How an AWS AI service is really called at runtime.** Two layers of the AWS AI
-stack are wired together. The triage agent runs on **Strands Agents / AgentCore
-Runtime** with **Amazon Bedrock** as the model: it deduplicates findings that
-describe the same flaw differently, writes a three-sentence summary for a
-non-specialist, and proposes a status with its justification. **AWS Continuum**
-performs the penetration tests, the code review of the deployed change, and
-generates the remediation pull request. Rempart calls the Continuum API
-directly (`CreateAgentSpace`, `CreateTargetDomain`, `VerifyTargetDomain`,
-`CreatePentest`, `StartPentestJob`, `BatchGetPentestJobs`, `ListFindings`,
-`UpdateFinding`, `StartCodeRemediation`) through a cross-account IAM role.
+**How AWS AI services are used.** Two layers of the AWS AI stack are wired
+together. **AWS Security Agent (Amazon Continuum)** performs the penetration
+tests, the code review of the deployed change, and generates the remediation
+pull request; Rempart calls the Continuum API directly (`CreateAgentSpace`,
+`CreateTargetDomain`, `VerifyTargetDomain`, `CreatePentest`, `StartPentestJob`,
+`BatchGetPentestJobs`, `ListFindings`, `UpdateFinding`, `StartCodeRemediation`)
+through a cross-account IAM role. The triage agent runs on **Strands Agents**
+with **Amazon Bedrock** as the model (`BedrockModel`, selected by
+`REMPART_LLM_PROVIDER=bedrock` in the deployed environment, with least-privilege
+`bedrock:InvokeModel` rights on the chosen model ARNs; an OpenAI-compatible
+endpoint remains the local fallback): it deduplicates findings that describe the
+same flaw differently, writes a three-sentence summary for a non-specialist,
+and proposes a status with its justification.
+
+*Proof status:* the calls are written and unit-tested against the official API
+reference, and the triage wiring is deployed — but the **first real runtime
+call** is the Continuum test reserved for **23 November 2026** (free-trial
+eligibility verified first). Until its redacted evidence is filed, we do not
+claim a completed live call.
 
 **Three measured outcomes**, all computed by code from recorded timestamps —
 never by the model:
@@ -76,7 +85,10 @@ Five lines:
 3. **Orchestrator**: Step Functions state machine — budget gate → start run →
    poll (60 s, capped at 4 h) → collect findings → triage → tickets. A Lambda
    polls every 5 minutes to discover CI/CD-gate tests Rempart did not start.
-4. **Triage agent**: Strands on AgentCore Runtime with Bedrock, five tools
+4. **Triage agent**: Strands Agents with **Amazon Bedrock** (`BedrockModel`,
+   provider `REMPART_LLM_PROVIDER=bedrock` in the deployed environment;
+   least-privilege `bedrock:InvokeModel` on the chosen model ARNs; monthly LLM
+   budget ceiling with deterministic fallback), five tools
    (`get_application_context`, `search_known_findings`, `get_finding_detail`,
    `get_past_decisions`, `submit_triage_proposal`).
 5. **Portal**: React + TypeScript + Vite, nine pages (Fleet, Tenant,
@@ -198,7 +210,7 @@ itself runs on a frozen dataset (`scripts/seed_demo.py` →
 ## Built with
 
 `aws-continuum` `aws-security-agent` `amazon-bedrock` `strands-agents`
-`agentcore-runtime` `aws-cdk` `step-functions` `lambda` `dynamodb` `cognito`
+`aws-cdk` `step-functions` `lambda` `dynamodb` `cognito`
 `api-gateway` `cloudfront` `s3` `ses` `eventbridge` `iam` `react` `typescript`
 `vite` `python` `pytest` `github-actions` `mergify` `serverless`
 `infrastructure-as-code` `multi-tenant` `devsecops` `application-security`

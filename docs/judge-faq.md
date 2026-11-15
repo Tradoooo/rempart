@@ -76,7 +76,7 @@ Continuum has no notion of "customer", no ceiling, no deadline, no mandate.
 ## What is the real share of AI, and what are its guardrails?
 
 Two AI layers: **Continuum's agents** perform the pentest (AWS side);
-**Rempart's triage agent** (Strands on AgentCore Runtime, Bedrock) deduplicates,
+**Rempart's triage agent** (Strands, Amazon Bedrock) deduplicates,
 summarises for a non-specialist and proposes a status — then **code takes back
 control**: the deterministic priority matrix wins on divergence, a "likely false
 positive" on Critical/High is always forced to human validation, and report

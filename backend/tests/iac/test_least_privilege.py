@@ -7,15 +7,31 @@ compte. Une action de trop, un `Resource: "*"` non justifié, une condition
 
 Ces tests verrouillent la politique au lieu de la décrire : un écart fait
 échouer la CI en nommant précisément l'action ajoutée ou retirée.
+
+Deux périmètres :
+
+- le **rôle inter-comptes** du template client (16 actions `securityagent:`,
+  ExternalId obligatoire, rôle OIDC borné) ;
+- les **droits Bedrock** du plan de contrôle : `bedrock:InvokeModel` et
+  `bedrock:InvokeModelWithResponseStream`, sur les seuls ARN de modèles
+  choisis, et seulement sur la Lambda qui trie.
 """
 
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
 from typing import Any
 
 import pytest
+from aws_cdk import assertions
 
 from tests.iac.test_client_template import load_template
+
+IAC_DIR = Path(__file__).resolve().parents[3] / "iac" / "control-plane"
+if str(IAC_DIR) not in sys.path:
+    sys.path.insert(0, str(IAC_DIR))
 
 # Annexe A du cahier des charges : les 16 actions, et pas une de plus.
 ANNEX_A_ACTIONS = {
@@ -42,6 +58,9 @@ FORBIDDEN_IAM_PREFIXES = (
     "iam:Put", "iam:Create", "iam:Attach", "iam:Detach", "iam:Delete",
     "iam:Update", "iam:PassRole", "iam:AddUserToGroup",
 )
+
+#: Droits Bedrock accordés au rôle du triage — et rien d'autre.
+BEDROCK_ACTIONS = {"bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"}
 
 
 def _resources(template: dict[str, Any]) -> dict[str, Any]:
@@ -196,3 +215,100 @@ def test_resource_wildcard_is_limited_to_securityagent():
 def test_template_declares_no_unmanaged_role():
     """Deux rôles seulement : exploitation et pipeline OIDC. Pas de rôle fantôme."""
     assert set(_roles(load_template())) == {"RempartOpsRole", "GitHubOidcRole"}
+
+
+# ---------------------------------------------------------------------- #
+# Droits Bedrock du plan de contrôle (agent de triage)
+# ---------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module")
+def control_plane() -> assertions.Template:
+    """Synthèse unique du plan de contrôle (coûteuse : une seule par module)."""
+    from app import build_app
+
+    app = build_app()
+    app.synth()
+    return assertions.Template.from_stack(app.node.find_child("RempartOrchestratorStack"))
+
+
+def _bedrock_statements(template: assertions.Template) -> list[dict[str, Any]]:
+    """Instructions IAM qui parlent à Bedrock, avec le rôle qui les porte."""
+    found: list[dict[str, Any]] = []
+    for policy in template.find_resources("AWS::IAM::Policy").values():
+        props = policy["Properties"]
+        for statement in props["PolicyDocument"]["Statement"]:
+            actions = _as_list(statement.get("Action"))
+            if any(a.startswith("bedrock:") for a in actions):
+                found.append({"statement": statement, "roles": props.get("Roles", [])})
+    return found
+
+
+def test_le_triage_est_le_seul_a_pouvoir_invoquer_bedrock(control_plane):
+    """Un seul rôle peut appeler le modèle : celui de la Lambda qui trie."""
+    statements = _bedrock_statements(control_plane)
+    assert statements, "le rôle du triage n'a aucun droit Bedrock : le modèle ne tourne pas"
+    roles = [role for item in statements for role in item["roles"]]
+    assert len(roles) == 1, f"plusieurs rôles peuvent appeler Bedrock : {roles}"
+    assert "DispatchTriage" in json.dumps(roles), (
+        f"les droits Bedrock ne sont pas sur la Lambda de triage : {roles}"
+    )
+
+
+def test_seules_les_deux_actions_de_invocation_sont_accordees(control_plane):
+    """`InvokeModel` et `InvokeModelWithResponseStream`, et pas une de plus."""
+    granted: set[str] = set()
+    for item in _bedrock_statements(control_plane):
+        granted.update(_as_list(item["statement"].get("Action")))
+    assert granted == BEDROCK_ACTIONS, (
+        f"actions Bedrock accordées inattendues : {sorted(granted)} — "
+        "le triage n'a besoin que d'invoquer le modèle"
+    )
+
+
+def test_les_droits_bedrock_sont_bornes_aux_modeles_choisis(control_plane):
+    """Aucun `Resource: "*"` : seuls les ARN de modèles retenus sont invocables."""
+    for item in _bedrock_statements(control_plane):
+        resources = _as_list(item["statement"].get("Resource"))
+        assert resources, "un droit Bedrock sans Resource borné"
+        for resource in resources:
+            assert "*" not in str(resource), (
+                f"invocation de tous les modèles AWS : {resource}"
+            )
+            assert str(resource).startswith("arn:aws:bedrock:"), resource
+            assert "::foundation-model/" in str(resource), resource
+
+
+def test_le_modele_bedrock_du_role_est_celui_de_l_environnement(control_plane):
+    """L'IAM et la variable d'environnement ne peuvent pas diverger."""
+    envs = [
+        props["Properties"]["Environment"]["Variables"]
+        for props in control_plane.find_resources("AWS::Lambda::Function").values()
+    ]
+    env_models = {
+        model.strip()
+        for value in (env.get("REMPART_BEDROCK_MODEL_IDS") for env in envs)
+        if value
+        for model in value.split(",")
+        if model.strip()
+    }
+    assert env_models, "aucune Lambda ne reçoit la liste des modèles Bedrock"
+    arn_models = {
+        str(resource).split("foundation-model/")[-1]
+        for item in _bedrock_statements(control_plane)
+        for resource in _as_list(item["statement"].get("Resource"))
+    }
+    assert arn_models == env_models, (
+        f"l'IAM ({sorted(arn_models)}) et l'environnement ({sorted(env_models)}) "
+        "n'accordent pas les mêmes modèles"
+    )
+
+
+def test_le_fournisseur_bedrock_est_le_defaut_dans_le_plan_de_controle(control_plane):
+    """Déployé, le triage parle à Bedrock ; le repli local reste InferHub."""
+    envs = [
+        props["Properties"]["Environment"]["Variables"]
+        for props in control_plane.find_resources("AWS::Lambda::Function").values()
+    ]
+    providers = {env.get("REMPART_LLM_PROVIDER") for env in envs}
+    assert providers == {"bedrock"}, providers
