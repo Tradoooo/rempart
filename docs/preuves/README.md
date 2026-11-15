@@ -12,6 +12,10 @@ Ce dossier contient les **fiches de preuves** :
   boucle de retest (idée #51) : rien ne démarrait jamais `RempartRetestClose` ;
   webhook GitHub signé, isolation par dépôt, idempotence face aux rejouements,
   et le routage placé après « run terminé ».
+- [`2026-11-15-scan-avant-prive.md`](2026-11-15-scan-avant-prive.md) — le
+  balayage secrets/identifiants avant le passage du dépôt en privé
+  (élément 4 de la checklist) : rien trouvé hormis un ID de compte AWS
+  réel, listé sans suppression.
 
 Pour chaque défaut : le symptôme mesuré *avant*, le commit du correctif, et la
 preuve *après* — avec la valeur observée et la commande qui la produit.
