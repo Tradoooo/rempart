@@ -5,6 +5,21 @@
 
 ---
 
+## Form facts (verify before pasting)
+
+| Field | Value |
+|---|---|
+| Track | **Track 2 — Deliver AI-Driven Outcomes for Customers** |
+| AWS AI services used | **AWS Security Agent (Amazon Continuum)** — penetration testing; **Amazon Bedrock via Strands Agents** — triage agent |
+| Public URL | https://tradoooo.github.io/rempart/ (frozen offline demo; CloudFront mirror: https://d1o2xnfrq8xomh.cloudfront.net) |
+| Architecture diagram | `docs/img/architecture.png` (exported from the Mermaid diagram; source: `docs/HLD.md` § 4 and `README.md`) |
+| Design document | [`docs/HLD.md`](HLD.md) |
+| Repository | `https://github.com/Tradoooo/rempart` — private, shared with `testing@devpost.com` and `aws-msp@amazon.com` at submission time |
+| New project | Rempart is a **new project started on 10 November 2026** for this hackathon. First commit of the repository: `d24edad`. No pre-existing work was reused. |
+| Demo credentials | Provided in the testing-instructions field of the form — never in the repo |
+
+---
+
 ## Project name
 
 **Rempart — continuous penetration testing as a managed subscription**
@@ -67,6 +82,14 @@ the customer's account, so a customer's findings never leave it and the test
 cost lands on their own bill. The MSP control plane reaches it through a
 cross-account role with a unique `sts:ExternalId` per customer and least
 privilege (16 `securityagent:` actions, no more).
+
+**Try it (free, nothing to install):** https://tradoooo.github.io/rempart/ —
+the portal runs in offline demo mode on a frozen dataset, so the tour costs
+$0 and exposes no customer data. Architecture diagram:
+[`docs/img/architecture.png`](img/architecture.png); full design document:
+[`docs/HLD.md`](HLD.md). Submitted to **Track 2 — Deliver AI-Driven Outcomes
+for Customers**. Rempart is a **new project started on 10 November 2026** for
+this hackathon (first commit: `d24edad`) — no pre-existing work was reused.
 
 ---
 

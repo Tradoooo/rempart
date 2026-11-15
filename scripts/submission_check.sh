@@ -10,15 +10,28 @@
 #      (200, ou 404 avec le HTML du bundle — normal sur GitHub Pages) ;
 #   3. le bundle JS téléchargé contient les 5 pages de gouvernance ;
 #   4. docs/img/*.png existantes sont listées ;
-#   5. imprime le bloc « à coller sur Devpost ».
+#   5. le dépôt est PRIVÉ (règlement : dépôt privé partagé au jury) ;
+#   6. aucun espace réservé d'identifiants ne reste dans les docs ;
+#   7. le schéma d'architecture PNG (formulaire Devpost) est présent ;
+#   8. l'issue du premier test Continuum (#36) est FERMÉE ;
+#   9. imprime le bloc « à coller sur Devpost ».
+#
+# Les contrôles 5 à 8 échouent tant que la soumission n'est pas prête :
+# c'est voulu — le script doit rester rouge jusqu'au bout.
 #
 # Code de sortie : 0 si tout est conforme, 1 sinon.
 
 set -uo pipefail
 
 BASE="https://tradoooo.github.io/rempart"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_SLUG="Tradoooo/rempart"
+REPO_URL="https://github.com/${REPO_SLUG}"
+CONTINUUM_ISSUE=36   # « Premier test Continuum réel » — bloquant soumission
+ARCH_PNG="docs/img/architecture.png"
+PLACEHOLDER_RE='JUDGE_USER|JUDGE_PASSWORD|ANALYST_USER|ANALYST_PASSWORD|<repo-url>'
+PLACEHOLDER_FILES=(README.md docs/*.md scripts/*.sh)
 CURL_TIMEOUT=30
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 BUNDLE_STRINGS=(
   "Evidence Dossier"
@@ -105,7 +118,78 @@ for png in "$REPO_ROOT"/docs/img/*.png; do
 done
 msg "   -> ${count} capture(s) PNG listée(s)."
 
-step "5. Bloc à coller sur Devpost"
+# --------------------------------------------------------------------- #
+# Barrières de soumission : le script DOUT échouer tant que l'une manque.
+# --------------------------------------------------------------------- #
+
+# gh_api <endpoint> : sortie de `gh api`, ou chaîne vide si gh est absent.
+gh_api() {
+  if command -v gh >/dev/null 2>&1; then
+    gh api "$1" 2>/dev/null || true
+  fi
+}
+
+step "5. Dépôt privé (règlement : partagé avec testing@devpost.com et aws-msp@amazon.com)"
+visibility="$(gh_api "repos/${REPO_SLUG}" | grep -o '"private":[a-z]*' | head -1 || true)"
+if [ -z "${visibility}" ]; then
+  # Sans gh (ou sans droit de lecture) : l'API publique répond 404 pour un
+  # dépôt privé — c'est le signal attendu une fois le basculement fait.
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time "${CURL_TIMEOUT}" \
+    "https://api.github.com/repos/${REPO_SLUG}")"
+  if [ "$code" = "404" ]; then
+    msg "   OK   ${REPO_URL} n'est plus accessible publiquement (privé ou injoignable sans jeton)"
+  else
+    msg "   KO   impossible de lire la visibilité (API -> ${code}) : vérifier à la main"
+    fail=1
+  fi
+elif echo "$visibility" | grep -q '"private":true'; then
+  msg "   OK   ${REPO_URL} est privé"
+else
+  msg "   KO   ${REPO_URL} est encore PUBLIC — bascule avant la soumission (voir submission-checklist.md, élément 4)"
+  fail=1
+fi
+
+step "6. Aucun espace réservé d'identifiants dans les docs"
+placeholders="$(grep -rInE "${PLACEHOLDER_RE}" "${PLACEHOLDER_FILES[@]}" \
+  --exclude=submission_check.sh 2>/dev/null || true)"
+if [ -z "$placeholders" ]; then
+  msg "   OK   aucun JUDGE_*/ANALYST_*/<repo-url> restant dans README.md, docs/ et scripts/"
+else
+  msg "   KO   espaces réservés restants :"
+  printf '%s\n' "$placeholders" | sed 's/^/        /'
+  fail=1
+fi
+
+step "7. Schéma d'architecture PNG (formulaire Devpost)"
+size="$(wc -c < "${REPO_ROOT}/${ARCH_PNG}" 2>/dev/null | tr -d '[:space:]')"
+if [ -n "$size" ] && [ "$size" -gt 0 ]; then
+  msg "   OK   ${ARCH_PNG} (${size} octets)"
+else
+  msg "   KO   ${ARCH_PNG} absent ou vide — bash scripts/export_architecture_png.sh"
+  fail=1
+fi
+
+step "8. Premier test Continuum (issue #${CONTINUUM_ISSUE}) terminé"
+issue_state="$(gh_api "repos/${REPO_SLUG}/issues/${CONTINUUM_ISSUE}" \
+  | grep -o '"state":"[a-z]*"' | head -1 | cut -d'"' -f4 || true)"
+if [ -z "${issue_state}" ]; then
+  # Sans gh : sur un dépôt encore public, l'API anonyme donne l'état ; sur un
+  # dépôt privé elle répond 404 et l'état doit être vérifié à la main.
+  issue_state="$(curl -s --max-time "${CURL_TIMEOUT}" \
+    "https://api.github.com/repos/${REPO_SLUG}/issues/${CONTINUUM_ISSUE}" \
+    | grep -o '"state":"[a-z]*"' | head -1 | cut -d'"' -f4 || true)"
+fi
+if [ "${issue_state}" = "closed" ]; then
+  msg "   OK   issue #${CONTINUUM_ISSUE} fermée : le test réel est prouvé (preuves dans docs/preuves/)"
+elif [ -z "${issue_state}" ]; then
+  msg "   KO   état de l'issue #${CONTINUUM_ISSUE} illisible (dépôt privé sans gh ?) : vérifier à la main"
+  fail=1
+else
+  msg "   KO   issue #${CONTINUUM_ISSUE} encore ${issue_state} : sans le test du 23/11, l'appel réel à un service d'IA AWS n'est pas prouvé"
+  fail=1
+fi
+
+step "9. Bloc à coller sur Devpost"
 cat <<'EOF'
 --- DÉBUT bloc Devpost (à copier-coller) ---
 

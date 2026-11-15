@@ -40,12 +40,29 @@ Show the real API call names at least once: judges must see the code calls AWS.
 
 ## 0:50 – 1:30 — A release introduces a vulnerability, the gate blocks it
 
+> **Mandatory sequence — internal accounts, upstream and downstream.** The
+> rules ask for the internal accounts "including all upstream/downstream
+> environments". The three consoles below must appear **in this order**, each
+> labelled on screen, cut cleanly (never two consoles in the same frame):
+>
+> 1. **MSP control plane** (`MSP CONTROL PLANE` label) — the assumed role and
+>    the region are visible; the **account id is masked**
+>    (`1234••••••89`).
+> 2. **Customer account, staging — upstream** (`CUSTOMER ACCOUNT — STAGING
+>    (UPSTREAM)` label) — the test runs here; assumed role visible, **ExternalId
+>    value fully masked** (`••••••••`), verified domain visible.
+> 3. **Customer account, production — downstream** (`CUSTOMER ACCOUNT —
+>    PRODUCTION (DOWNSTREAM)` label) — the promotion is **blocked** (gate red,
+>    deployment skipped); if a later release is allowed through, show the
+>    explicit acceptance with the analyst's decision instead.
+
 | On screen | Voice-over | Overlay |
 |---|---|---|
 | Code editor: a diff on `GET /orders/{id}` removing the ownership check. Commit message `feat: expose order details`. | "A developer merges a change. It removes an ownership check on the order endpoint." | `commit a1b2c3d` |
-| GitHub Actions run page: deploy to staging green, then the Rempart gate step starts. | "The pipeline deploys to staging and the gate starts a test limited to the deployed commit range." | `pentest-gate.yml · scope: deployed range` |
-| **Customer** AWS console, Continuum: the pentest job appears, status `RUNNING`, task-hours counter climbing. | "Continuum tests the change inside the customer's own account. Task-hours accumulate on their bill, not ours." | `task-hours 0.4 → 1.2` |
-| The pipeline step turns red; the promotion to production does not happen. | "A Critical finding is confirmed. The gate blocks promotion to production." | `BLOCKED — severity threshold reached` |
+| **MSP control plane console**, account id masked, assumed role `rempart-orchestrator`, region visible. | "The MSP operates from its own control-plane account. It never touches the customer's resources directly — it assumes a role, through an external id, in the customer's account." | `MSP CONTROL PLANE · assumeRole · account masked` |
+| **Customer account, staging (upstream)**: the cross-account role in the customer's CloudFormation stack, then the Continuum pentest job appearing, status `RUNNING`. | "In the customer's staging account — upstream of any promotion — Continuum tests the change inside their own account. Task-hours accumulate on their bill, not ours." | `CUSTOMER ACCOUNT · STAGING (UPSTREAM) · ExternalId masked` |
+| GitHub Actions run page: deploy to staging green, then the Rempart gate step starts, then turns red. | "The pipeline deploys to staging and the gate starts a test limited to the deployed commit range. A Critical finding is confirmed." | `pentest-gate.yml · scope: deployed range` |
+| **Customer account, production (downstream)**: the promotion step does not happen — the gate blocks it. | "Downstream, the promotion to production is blocked. Nothing vulnerable moves forward." | `CUSTOMER ACCOUNT · PRODUCTION (DOWNSTREAM) · BLOCKED` |
 | Portal, Run page: trigger `cicd`, status `blocked`, duration, task-hours, estimated cost. | "Rempart detected the test within five minutes, pulled the findings, and recorded the cost." | `run job-4f2a · blocked · 1.4 task-hours · 70 $` |
 
 Timestamp overlay rule: show the **deployment time** and the **test end time**
@@ -58,7 +75,7 @@ narration.
 
 | On screen | Voice-over | Overlay |
 |---|---|---|
-| Portal → Triage Queue. The finding card: IDOR on `/orders/{id}`, severity Critical, confidence High. | "The triage agent runs on Strands Agents with Amazon Bedrock. It deduplicates, writes a plain summary, and proposes a status." | `Strands · AgentCore Runtime · Bedrock` |
+| Portal → Triage Queue. The finding card: IDOR on `/orders/{id}`, severity Critical, confidence High. | "The triage agent runs on Strands Agents with Amazon Bedrock. It deduplicates, writes a plain summary, and proposes a status." | `Strands · Amazon Bedrock · bedrock:InvokeModel` |
 | Zoom on the plain summary, then on priority `P1` and due date `+7 days`. | "The priority is not the model's opinion: a deterministic matrix combines severity, confidence, exposure and data sensitivity. The code recomputes it, and the matrix wins." | `P1 · due in 7 days · matrix-computed` |
 | The finding shows `pending_validation`. The analyst clicks **Confirm**. | "Because the finding is Critical, the model cannot settle it alone. An analyst confirms in one click." | `ENF-IA-02 — human decision required` |
 | GitHub: the issue appears with summary, proof and deadline. | "A ticket opens in the customer's repository, with its contractual deadline." | `issue #42 · P1 · due 18 Nov` |
@@ -96,12 +113,16 @@ the words *proof of closure* on camera.
 
 - [ ] Clean browser profile, no bookmarks bar, no extensions, no notifications.
 - [ ] Terminal font ≥ 16 pt, dark theme, no shell prompt leaking paths or tokens.
+- [ ] The **three internal contexts** appear in order and are labelled:
+      MSP control plane → customer staging (upstream) → customer production
+      (downstream); account id masked, assumed role visible, ExternalId value
+      masked.
 - [ ] Both consoles visible during the release segment: **customer** account and
       **MSP** account, each labelled on screen.
 - [ ] Real timestamps on screen for every test (recorded in advance, edited).
 - [ ] No third-party brand, logo or product name other than AWS and our own.
 - [ ] No third-party music. Either silence or a bed we recorded.
 - [ ] English voice-over; English UI (the portal is English-only by design).
-- [ ] Total runtime 2:50 – 3:10.
+- [ ] Total runtime 2:50 – 3:00 — **the export must not exceed 3:00**.
 - [ ] Public YouTube link, unlisted is **not** accepted by the rules.
 - [ ] The three measured outcomes appear on screen as numbers, not as claims.

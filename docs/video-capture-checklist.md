@@ -59,6 +59,36 @@ If the gate fails, replace them with the portal fallback and say `demo data`.
 | L10 | MSP portal Evidence/Finding | Closed state, retest job ID and SHA-256 evidence | Proven closure |
 | L11 | MSP portal Reports | Live timestamps and values matching the run | Outcome |
 
+## Internal accounts, upstream and downstream — mandatory sequence
+
+The rules ask for the **internal accounts, including every upstream and
+downstream environment**. The video must show the whole chain, in this order,
+with the three contexts clearly labelled on screen. One shot each, cut on the
+label, never two consoles blurred in the same frame.
+
+| # | Console / environment | On screen (mandatory) | What it proves |
+|---|---|---|---|
+| A | **MSP control plane** (plan de contrôle) | account id **masked** (`1234••••••89`), the **assumed role** visible (`rempart-orchestrator` / `rempart-ops-role`), region `eu-north-1` | the MSP operates from its own account |
+| B | **Customer account — staging (upstream)**, where the test runs | account id **masked**, the **assumed role** in the customer account, the **ExternalId value masked** (`••••••••-••••-…`), the verified domain, the Continuum agent space | the test is executed in the customer's own account, through a cross-account role guarded by `sts:ExternalId` |
+| C | **Customer account — production (downstream)** | the **promotion blocked** state (CI/CD gate red, deployment skipped) — or, if a release is allowed through, the explicit acceptance screen with the analyst's decision | what happens to the release depending on the finding |
+
+Rules for these three shots:
+
+- the **account id is never shown in clear**: mask every digit but the last two;
+- the **ExternalId value is never shown in clear**: mask it entirely, the label
+  is enough;
+- the **assumed role name** and the **region** are shown as they are: they are
+  the point of the shot;
+- no password, no access key, no session token, no authorization header, no
+  temporary Cognito credential;
+- the three contexts are always named on screen: `MSP CONTROL PLANE`,
+  `CUSTOMER ACCOUNT — STAGING (UPSTREAM)`, `CUSTOMER ACCOUNT — PRODUCTION
+  (DOWNSTREAM)`.
+
+If the 23/11 gate has not been cleared, these three shots are replaced by the
+frozen-demo equivalents (the console is never faked as live): the sequence is
+then presented as the architecture, with the voice-over saying "demo data".
+
 ## Video assembly map
 
 - **Scene 1–2:** board/design capture; no portal claim.
@@ -74,9 +104,13 @@ If the gate fails, replace them with the portal fallback and say `demo data`.
 ## Final review before export
 
 - [ ] Every portal shot is marked `frozen demo data` or has a live-run source.
+- [ ] The three internal accounts/environments appear in order: **MSP control
+      plane → customer staging (upstream) → customer production (downstream)**,
+      each labelled, with the account id masked, the assumed role visible and
+      the ExternalId value masked.
 - [ ] Customer account and MSP control plane are visibly distinguished.
 - [ ] Eligibility evidence was captured before any real start request.
 - [ ] No shot displays a password, token, ExternalId value or personal data.
 - [ ] Live timestamps match the run and retest records.
-- [ ] The public YouTube export is English, about three minutes, and contains
+- [ ] The public YouTube export is English, **3:00 or less**, and contains
       no third-party music or brand visible in the frame.

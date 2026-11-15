@@ -1,8 +1,10 @@
 # Test instructions for judges — Rempart
 
 > Text to paste into the Devpost "testing instructions" field.
-> Placeholders in `CAPITALS` are filled in at deployment time
-> (see [`submission-checklist.md`](submission-checklist.md) for blockers).
+> Demo account credentials are **provided in the Devpost submission form**
+> (and nowhere else): one read-only account per role, created in Cognito on the
+> frozen dataset, passwords generated and kept in the team vault — never in
+> this repository.
 
 ## What you are looking at
 
@@ -13,6 +15,12 @@ findings, opens a ticket with a contractual deadline, requests a remediation
 pull request, and closes the finding only when a retest proves it is gone.
 
 **Portal (live, public):** `https://tradoooo.github.io/rempart/`
+(mirror on CloudFront: `https://d1o2xnfrq8xomh.cloudfront.net`)
+
+**API (live):** `https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com`
+
+**Repository:** `https://github.com/Tradoooo/rempart` (private, shared with
+`testing@devpost.com` and `aws-msp@amazon.com` at submission time)
 
 > Served by GitHub Pages in **offline demo mode**: the data comes from the
 > frozen dataset `demo/seed/demo-dataset.json`, the same one served by
@@ -31,10 +39,15 @@ pull request, and closes the finding only when a retest proves it is gone.
 
 ## Demo credentials
 
-| Role | Login | Password | What it can do |
-|---|---|---|---|
-| Judge (read-only) | `JUDGE_USER` | `JUDGE_PASSWORD` | Browse every page, see all findings and KPIs. Buttons are disabled and a banner reads "Judge demo — read-only". |
-| Analyst (guided tour only) | `ANALYST_USER` | `ANALYST_PASSWORD` | Confirm or correct a triage proposal. Use this only if the video is unavailable. |
+**Credentials are provided in the Devpost submission form.** One Cognito
+account per role, read-only, provisioned on the frozen dataset. Passwords are
+generated, stored in the team vault and rotated after judging; they never
+appear in this repository or in any public link.
+
+| Role | Account | What it can do |
+|---|---|---|
+| Judge (read-only) | `judge-demo@rempart.demo` — password in the Devpost form | Browse every page, see all findings and KPIs. Buttons are disabled and a banner reads "Judge demo — read-only". |
+| Analyst (guided tour only) | `analyst-demo@rempart.demo` — password in the Devpost form | Confirm or correct a triage proposal. Use this only if the video is unavailable. |
 
 The judge account maps to the `demo` role: read access to the demo tenant, one
 on-demand test per day on the minimal scope, no write access. This is enforced
@@ -214,7 +227,7 @@ Full details, options and the test list: [`scripts/README-local-demo.md`](../scr
 ## Reproducing the tests locally
 
 ```bash
-git clone <repo-url> && cd rempart
+git clone https://github.com/Tradoooo/rempart.git && cd rempart
 python3 -m venv .venv && .venv/bin/pip install -r backend/requirements-ci.txt
 
 cd backend && ../.venv/bin/python -m pytest tests -q     # 188 tests
@@ -243,6 +256,9 @@ This private repository is shared with `testing@devpost.com` and
 `aws-msp@amazon.com`, and contains the code, the infrastructure as code, the
 specification, the design document and these instructions.
 
+- Repository: `https://github.com/Tradoooo/rempart`
+- Architecture diagram: [`docs/img/architecture.png`](img/architecture.png)
+  (Mermaid source in [`docs/HLD.md`](HLD.md) § 4 and in the README)
 - Design document: [`docs/HLD.md`](HLD.md)
 - Acceptance scenarios R1–R12: [`docs/acceptance.md`](acceptance.md)
 - Functional specification (French, internal working document):
