@@ -1,14 +1,29 @@
 # Submission checklist — AWS MSP AI Hackathon, Track 2
 
+## ⚠ Before submission (dated 15 November 2026)
+
+**The first real Continuum test must happen on 23 November 2026 or later —
+tracked in [issue #36](https://github.com/Tradoooo/rempart/issues/36)
+(`blocker-submission`). Until it is closed with redacted evidence in
+`docs/preuves/`, requirement 5 below ("the code really calls an AWS AI service
+at runtime") is **not proven**, and the Devpost submission cannot be sent.
+The runbook [`runbook-premier-test.md`](runbook-premier-test.md) is the single
+procedure: eligibility check first (Billing → Free Tier + Continuum console),
+evidence sheet, then `free_tier_confirmed` on the tenant, then **one** test.
+No `StartPentestJob`, ever, before that gate — `REMPART_FREE_TIER_ONLY=1`
+stays enabled.**
+
 > Source: `docs/cahier-des-charges-tests-intrusion-continu.md` § 18.1.
 > Deadline: **Friday 11 December 2026, 12:00 PT** (21:00 Paris).
 > Judging ends 22 January 2027 — the solution must stay online until then.
 >
-> Statuses are honest as of **14 November 2026**. Cognito is active, the
+> Statuses are honest as of **15 November 2026**. Cognito is active, the
 > CloudFront portal and API are online, and the remaining runtime gate is the
 > first real Continuum test. It must not start before **23 November 2026** and
 > must not be unlocked until the customer account's free-trial eligibility is
-> verified and recorded. See [`deployment-eu-north-1.md`](deployment-eu-north-1.md),
+> verified and recorded — tracked in
+> [issue #36](https://github.com/Tradoooo/rempart/issues/36). See
+> [`deployment-eu-north-1.md`](deployment-eu-north-1.md),
 > [`portal-deployment.md`](portal-deployment.md), and
 > [`runbook-premier-test.md`](runbook-premier-test.md).
 
@@ -18,7 +33,7 @@
 | 2 | Description in English: features, problem, measured outcomes | **done** | [`devpost-submission.md`](devpost-submission.md) § Description, How we built it, three measured outcomes. |
 | 3 | Public URL of the portal, with demo credentials in the test instructions | **done** | GitHub Pages remains the free judging demo: https://tradoooo.github.io/rempart/. The AWS-backed portal is online at https://d1o2xnfrq8xomh.cloudfront.net and the API is online at https://qm6dmdkgdg.execute-api.eu-north-1.amazonaws.com. Cognito is **active** with authorization-code + PKCE; the hosted domain and callback configuration are recorded in [`portal-deployment.md`](portal-deployment.md). Keep public judging on the frozen, offline dataset; do not expose customer data. |
 | 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decision needed** | The repository is currently **public** (it was created private; the visibility changed outside this work). The specification asks for a *private* repo shared with the two judge accounts. A public repo is generally accepted by Devpost, but it exposes the French specification — commercial strategy, pricing hypotheses, schedule. **Your call**: keep it public, or set it back to private (GitHub Pages keeps working on a Pro plan) and invite the judge accounts at submission time. |
-| 5 | The code really calls an AWS AI service at runtime | **blocked until 23 Nov** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)). The first real `StartPentestJob` is reserved for **23 November 2026** and is forbidden until the customer account's free-trial eligibility has been checked in Billing and Continuum, recorded in the run evidence, and confirmed for the tenant. Follow [`runbook-premier-test.md`](runbook-premier-test.md); if eligibility is absent or ambiguous, use the frozen demo and do not start a job. |
+| 5 | The code really calls an AWS AI service at runtime | **blocked until 23 Nov** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)). The first real `StartPentestJob` is reserved for **23 November 2026** and is forbidden until the customer account's free-trial eligibility has been checked in Billing and Continuum, recorded in the run evidence, and confirmed for the tenant. Follow [`runbook-premier-test.md`](runbook-premier-test.md) and [issue #36](https://github.com/Tradoooo/rempart/issues/36); if eligibility is absent or ambiguous, use the frozen demo and do not start a job. |
 | 6 | Video ~3 minutes, public on YouTube, English, no third-party brand or music | **out of scope for the agent** | Script written and timed: [`video-script.md`](video-script.md). The user records and edits. |
 | 7 | Architecture diagram | **done** | Mermaid diagrams in [`HLD.md`](HLD.md) (control plane + customer account) and in [`README.md`](../README.md); sequence diagram of a delivery and finding lifecycle state diagram in the specification § 11.4-11.5. |
 | 8 | Design document (HLD) | **done** | [`HLD.md`](HLD.md). |
@@ -83,6 +98,8 @@ https://aws-agentic-msp.devpost.com/ before running this.
    Record the account, region, timestamp, evidence screenshot and operator in
    [`runbook-premier-test.md`](runbook-premier-test.md). If either check is
    missing, ambiguous or negative, stop and use the frozen demo.
+   Tracked in [issue #36](https://github.com/Tradoooo/rempart/issues/36)
+   (label `blocker-submission`).
 2. **AWS credentials and deployment session** — use the least-privilege
    deployment session already documented for the control plane; never place
    credentials in the repository or screenshots.
