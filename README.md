@@ -11,6 +11,26 @@
 
 ---
 
+## 🚦 Status — 15 November 2026
+
+> ⚠ **The first real Continuum test happens on 23 November 2026 or later —
+> tracked in [issue #36](https://github.com/Tradoooo/rempart/issues/36)
+> (label `blocker-submission`).** Until that test is done and its redacted
+> evidence is in `docs/preuves/`, the "the code really calls an AWS AI service
+> at runtime" requirement is **not proven**, and the Devpost submission
+> (deadline **11 December 2026, 12:00 PT**) cannot be sent. The single
+> procedure is [`docs/runbook-premier-test.md`](docs/runbook-premier-test.md):
+> eligibility first (Billing → Free Tier + Continuum console), evidence sheet,
+> then `free_tier_confirmed` on the tenant, then **one** test. No
+> `StartPentestJob` before that gate; `REMPART_FREE_TIER_ONLY=1` stays on.
+>
+> Everything else is live today: the public judge demo on GitHub Pages (0 €,
+> frozen dataset), the AWS-backed portal on CloudFront, the API, and the CI
+> verdict under 5 minutes. The full honest status list is
+> [`docs/submission-checklist.md`](docs/submission-checklist.md).
+
+---
+
 ## 📌 Executive Pitch & Value Proposition
 
 Traditional penetration testing happens once a year, producing an obsolete PDF weeks after execution while software development teams ship code daily.
