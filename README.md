@@ -268,7 +268,9 @@ Continuum calls) still needs credentials and a verified domain; tracked in
 [`docs/submission-checklist.md`](docs/submission-checklist.md).
 
 - **Portal URL**: `https://tradoooo.github.io/rempart/`
-- **Judge credentials**: `JUDGE_USER` / `JUDGE_PASSWORD`, role `demo`
+- **Judge credentials**: provided in the Devpost submission form (one read-only
+  Cognito account per role, provisioned on the frozen dataset; passwords are
+  generated, kept in the team vault and never committed) — role `demo`
   (read-only, banner "Judge demo — read-only", one on-demand test per day on
   the minimal scope)
 
@@ -311,6 +313,7 @@ AWS MSP AI Hackathon — Track 2, *Deliver AI-Driven Outcomes for Customers*.
 Submission deadline: **Friday 11 December 2026, 12:00 PT**.
 
 - [Devpost submission text](docs/devpost-submission.md) — ready to paste into the form
+- [Architecture diagram (PNG)](docs/img/architecture.png) — exported from the Mermaid diagram above, for the Devpost form (`bash scripts/export_architecture_png.sh`)
 - [What Rempart adds on top of AWS Continuum](docs/what-rempart-adds.md) — the answer to *"isn't this just a wrapper?"*, every claim backed by a file or a test
 - [Free-tier runbook](docs/free-tier-runbook.md) — the four coded locks that make a paid test impossible by default, and the zero-cost demo path
 - [AWS Continuum API verification](docs/api-verification.md) — action-by-action check against the official API reference, and the pricing trap we avoided

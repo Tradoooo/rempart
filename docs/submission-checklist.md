@@ -35,7 +35,7 @@ stays enabled.**
 | 4 | Private repo shared with `testing@devpost.com` and `aws-msp@amazon.com` | **decided: private** — owner action at submission | The decision is made (15 November 2026): the repository goes back to **private** and the two judge accounts are invited at submission time. **Only the owner (`Tradoooo`) can do this** — the working account (`GaiaSG94`) has `push` but not `admin`, and the invitations API answered 403 on 15/11. Before switching: (1) confirm the owner's plan keeps **GitHub Pages serving `tradoooo.github.io/rempart` from a private repo** (on a personal account this needs a paid plan); if Pages stops, repoint every public link to the frozen demo already served on CloudFront — https://d1o2xnfrq8xomh.cloudfront.net — and update README, `judging-test-instructions.md`, `devpost-submission.md` and `scripts/submission_check.sh`. (2) Run the secret scan in `docs/preuves/` before the switch (done 15/11: no key, no password, no ExternalId; one **real AWS account ID `710332178565`** appears in docs/tests/scripts — low sensitivity, stays in history unless the owner rewrites it). The step-by-step invitation procedure is at the bottom of this file. |
 | 5 | The code really calls an AWS AI service at runtime | **blocked until 23 Nov** | Calls are written and unit-tested against the official API reference ([`docs/api-verification.md`](api-verification.md)). The first real `StartPentestJob` is reserved for **23 November 2026** and is forbidden until the customer account's free-trial eligibility has been checked in Billing and Continuum, recorded in the run evidence, and confirmed for the tenant. Follow [`runbook-premier-test.md`](runbook-premier-test.md) and [issue #36](https://github.com/Tradoooo/rempart/issues/36); if eligibility is absent or ambiguous, use the frozen demo and do not start a job. |
 | 6 | Video ~3 minutes, public on YouTube, English, no third-party brand or music | **out of scope for the agent** | Script written and timed: [`video-script.md`](video-script.md). The user records and edits. |
-| 7 | Architecture diagram | **done** | Mermaid diagrams in [`HLD.md`](HLD.md) (control plane + customer account) and in [`README.md`](../README.md); sequence diagram of a delivery and finding lifecycle state diagram in the specification § 11.4-11.5. |
+| 7 | Architecture diagram | **done** | Mermaid diagrams in [`HLD.md`](HLD.md) (control plane + customer account) and in [`README.md`](../README.md); **PNG export for the Devpost form**: [`docs/img/architecture.png`](img/architecture.png) (regenerated with `bash scripts/export_architecture_png.sh`); sequence diagram of a delivery and finding lifecycle state diagram in the specification § 11.4-11.5. |
 | 8 | Design document (HLD) | **done** | [`HLD.md`](HLD.md). |
 | 9 | If the project reuses existing work: what changed during the period | **n/a** | Rempart was started from scratch on 10 November 2026. Commit `d24edad` is the first commit of the repository. |
 
@@ -144,3 +144,40 @@ final checks).
 **Hard stop:** no `StartPentestJob`—directly or through the run API—until item 1
 is complete and `free_tier_confirmed` is explicitly set for the target tenant.
 The default `REMPART_FREE_TIER_ONLY=1` must remain enabled.
+
+## Demo accounts for the judges (owner, before submission)
+
+The judge tour runs on the **frozen dataset** and must cost 0 $. Two Cognito
+accounts, one per role, read-only:
+
+| Account | Cognito group | Scope |
+|---|---|---|
+| `judge-demo@rempart.demo` | `demo` | read-only on the demo tenant, one on-demand test per day on the minimal scope |
+| `analyst-demo@rempart.demo` | `analyst` | same, plus confirming a triage proposal (guided tour only) |
+
+Procedure (owner, AWS session):
+
+1. Create the two users in the Cognito user pool
+   (`iac/control-plane/stacks/identity.py` → groups `demo` and `analyst`),
+   with `FORCE_CHANGE_PASSWORD` so each judge sets their own password on first
+   login;
+2. Generate the passwords, store them in the **vault** (Bitwarden Secrets
+   Manager) — never in the repository, never in a ticket;
+3. Deliver them to the judges **in the Devpost "testing instructions" field**:
+   the docs only say *"credentials provided in the Devpost form"*;
+4. Rotate or delete the accounts after judging (22 January 2027).
+
+> The accounts are created on the deployed stack, not by this repository: no
+> secret is ever committed.
+
+## One-shot verification before pressing "Submit"
+
+```bash
+bash scripts/submission_check.sh
+```
+
+The script re-checks the public demo **and** fails while any submission
+barrier is still up: the repository not yet private, a leftover credential
+placeholder in the docs, a missing `docs/img/architecture.png`, or the
+Continuum issue ([#36](https://github.com/Tradoooo/rempart/issues/36)) still
+open. It must exit 0 before the Devpost form is submitted.
