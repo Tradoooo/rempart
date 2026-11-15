@@ -1,4 +1,4 @@
-"""Client LLM du triage — Strands branché sur un endpoint OpenAI-compatible.
+"""Client LLM du triage — Strands branché sur Amazon Bedrock ou un endpoint OpenAI-compatible.
 
 Pourquoi ce module existe : le triage de Rempart savait déjà utiliser un
 vrai modèle Strands (`triage/agent.py::_run_strands_agent`), mais rien ne le
@@ -6,24 +6,30 @@ construisait : en production, l'agent tombait donc toujours sur le repli
 déterministe. C'est ce qui rendait la démonstration « pas assez réelle » : les
 propositions venaient d'un règleur, pas d'un modèle.
 
-Ici, on construit le client Strands à partir de l'environnement :
+Ici, on construit le client Strands à partir de l'environnement. Deux
+fournisseurs, choisis par ``REMPART_LLM_PROVIDER`` :
 
-- ``REMPART_LLM_BASE_URL`` (ou ``LLM_BASE_URL``) — endpoint compatible
-  OpenAI (par défaut celui d'InferHub : ``https://api.inferhub.dev/v1``) ;
-- ``REMPART_LLM_API_KEY`` (ou ``LLM_API_KEY``) — secret, jamais écrit dans un
-  template : en production il vient d'un paramètre SSM SecureString, en local
-  de ``~/.config/agent-secrets/inferhub.env`` ;
-- ``REMPART_LLM_MODEL`` — identifiant du modèle (``combo/cheap`` par défaut).
+- ``bedrock`` — `strands.models.bedrock.BedrockModel`, la valeur par défaut
+  dans l'environnement **déployé** (le CDK pose la variable) : pas de clé à
+  gérer, le rôle IAM de la Lambda porte `bedrock:InvokeModel` sur les ARN de
+  modèles choisis, pas plus. La liste se règle avec
+  ``REMPART_BEDROCK_MODEL_IDS`` (séparés par des virgules) ;
+- ``openai_compat`` — endpoint compatible OpenAI (le repli **local**,
+  InferHub par défaut) : ``REMPART_LLM_BASE_URL``/``LLM_BASE_URL``,
+  ``REMPART_LLM_API_KEY``/``LLM_API_KEY`` (secret : paramètre SSM
+  SecureString en production, fichier local en développement),
+  ``REMPART_LLM_MODEL``/``REMPART_LLM_MODELS``.
 
 Sans configuration, on renvoie ``None`` : le triage déterministe reste le
 repli, et la démo hors ligne ne coûte donc **rien** (aucun appel LLM, aucune
-facturation).
+facturation). Le plafond budgétaire (`triage/llm_budget.py`) ferme le robinet
+de la même façon quand le mois dépasse le budget configuré.
 
 Les garde-fous déterministes (`triage/guardrails.py`) s'appliquent TOUJOURS
-après le modèle : priorité recalculée par la matrice, EF-TRI-05 (un Critical ou
-un High ne peut pas être écarté seul comme faux positif), détection de doublon
-et de régression. Un modèle qui propose n'importe quoi ne peut donc pas faire
-passer une faute critique en P4.
+après le modèle, quel que soit le fournisseur : priorité recalculée par la
+matrice, EF-TRI-05 (un Critical ou un High ne peut pas être écarté seul comme
+faux positif), détection de doublon et de régression. Un modèle qui propose
+n'importe quoi ne peut donc pas faire passer une faute critique en P4.
 """
 
 from __future__ import annotations
@@ -34,6 +40,8 @@ from typing import Any
 
 from strands.models import Model
 
+from . import llm_budget
+
 LOGGER = logging.getLogger("rempart.triage.llm")
 
 DEFAULT_BASE_URL = "https://api.inferhub.dev/v1"
@@ -43,6 +51,19 @@ DEFAULT_BASE_URL = "https://api.inferhub.dev/v1"
 #: ~2 s, mais peut être saturé ; `ali/glm-5.2` répond en ~2 s ; au-delà, les
 #: fournisseurs sont hors budget de l'utilisateur (HTTP 402 « no_provider_under_bid »).
 DEFAULT_MODELS = ("combo/cheap", "ali/glm-5.2")
+
+PROVIDER_ENV = "REMPART_LLM_PROVIDER"
+PROVIDER_BEDROCK = "bedrock"
+PROVIDER_OPENAI_COMPAT = "openai_compat"
+#: Sans variable, le repli local est InferHub ; c'est le CDK qui pose
+#: ``REMPART_LLM_PROVIDER=bedrock`` dans les Lambdas déployées.
+DEFAULT_PROVIDER = PROVIDER_OPENAI_COMPAT
+
+BEDROCK_MODEL_IDS_ENV = "REMPART_BEDROCK_MODEL_IDS"
+#: Profil d'inférence européen de Claude Sonnet 4.5 — à **confirmer** dans le
+#: catalogue Bedrock de la région déployée (eu-north-1) avant toute
+#: facturation ; surchargeable par ``REMPART_BEDROCK_MODEL_IDS``.
+DEFAULT_BEDROCK_MODEL_IDS = ("eu.anthropic.claude-sonnet-4-5-20250929-v1:0",)
 
 #: Nom du paramètre SSM SecureString qui porte la clé (jamais la valeur).
 SSM_PARAM_ENV = "REMPART_LLM_API_KEY_SSM_PARAM"
@@ -218,16 +239,83 @@ def model_ids() -> tuple[str, ...]:
     return DEFAULT_MODELS
 
 
+def provider() -> str:
+    """Fournisseur choisi : ``bedrock`` ou ``openai_compat`` (défaut local)."""
+    raw = (os.environ.get(PROVIDER_ENV) or "").strip().lower()
+    return raw if raw in (PROVIDER_BEDROCK, PROVIDER_OPENAI_COMPAT) else DEFAULT_PROVIDER
+
+
+def bedrock_model_ids() -> tuple[str, ...]:
+    """Identifiants de modèles Bedrock essayés dans l'ordre.
+
+    Variable **absente** : la liste par défaut. Variable **posée** (même vide) :
+    c'est elle qui fait foi — la poser à vide désactive Bedrock sans toucher au
+    code.
+    """
+    raw = os.environ.get(BEDROCK_MODEL_IDS_ENV)
+    if raw is None:
+        return DEFAULT_BEDROCK_MODEL_IDS
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def bedrock_region() -> str | None:
+    """Région du client Bedrock : la région courante de la Lambda."""
+    return (
+        os.environ.get("REMPART_REGION")
+        or os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+    )
+
+
+def bedrock_configured() -> bool:
+    """Vrai si au moins un identifiant de modèle Bedrock est disponible."""
+    return bool(bedrock_model_ids())
+
+
 def build_model_client(model_client: Any = None) -> Any:
     """Construit le client Strands du triage, ou ``None`` si non configuré.
 
     ``model_client`` permet d'injecter un client (tests) sans toucher à
-    l'environnement. Sinon, une chaîne de modèles est construite : le premier
-    qui répond est utilisé, les suivants servent de repli si un fournisseur est
-    saturé.
+    l'environnement. Sinon, le fournisseur est choisi par
+    ``REMPART_LLM_PROVIDER`` ; dans les deux cas, une chaîne de modèles est
+    construite : le premier qui répond est utilisé, les suivants servent de
+    repli. Le plafond budgétaire (`triage/llm_budget.py`) est vérifié **avant**
+    toute construction : budget épuisé = ``None`` = triage déterministe.
     """
     if model_client is not None:
         return model_client
+    if llm_budget.budget_exceeded():
+        return None
+    if provider() == PROVIDER_BEDROCK:
+        return _build_bedrock_client()
+    return _build_openai_client()
+
+
+def _build_bedrock_client() -> Any:
+    """Chaîne de `BedrockModel` Strands : droits IAM par ARN, pas de clé à gérer."""
+    ids = bedrock_model_ids()
+    if not ids:
+        LOGGER.warning("provider=bedrock mais aucun modèle (REMPART_BEDROCK_MODEL_IDS)")
+        return None
+    try:
+        from strands.models.bedrock import BedrockModel
+    except ImportError as exc:  # pragma: no cover - dépendance optionnelle
+        LOGGER.warning("client Bedrock indisponible (strands) : %s", exc)
+        return None
+    region = bedrock_region()
+    models = []
+    for model_id in ids:
+        try:
+            models.append(BedrockModel(model_id=model_id, region_name=region))
+        except Exception as exc:  # noqa: BLE001 - une région absente ne casse pas le triage
+            LOGGER.warning("modèle Bedrock %s non constructible : %s", model_id, exc)
+    if not models:
+        return None
+    return models[0] if len(models) == 1 else _FallbackModel(models)
+
+
+def _build_openai_client() -> Any:
+    """Chaîne de modèles OpenAI-compatibles (repli local : InferHub)."""
     if not llm_configured():
         return None
     base = base_url()
@@ -259,16 +347,26 @@ def build_model_client(model_client: Any = None) -> Any:
 
 
 __all__ = [
+    "BEDROCK_MODEL_IDS_ENV",
+    "DEFAULT_BEDROCK_MODEL_IDS",
     "DEFAULT_BASE_URL",
     "DEFAULT_MODELS",
+    "DEFAULT_PROVIDER",
+    "PROVIDER_BEDROCK",
+    "PROVIDER_ENV",
+    "PROVIDER_OPENAI_COMPAT",
     "SSM_PARAM_ENV",
     "api_key",
     "api_key_from_ssm",
     "base_url",
+    "bedrock_configured",
+    "bedrock_model_ids",
+    "bedrock_region",
     "build_model_client",
     "is_real_model",
     "llm_configured",
     "model_ids",
     "model_label",
+    "provider",
     "strands_available",
 ]

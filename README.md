@@ -36,10 +36,12 @@
 Traditional penetration testing happens once a year, producing an obsolete PDF weeks after execution while software development teams ship code daily.
 
 **Rempart** enables Managed Service Providers (MSPs) to deliver **continuous application penetration testing as a recurring monthly subscription**:
-- **Continuous CI/CD Gating**: At every release, AWS Security Agent automatically tests deployed increments in staging, blocking promotion if P1/P2 vulnerabilities are uncovered.
-- **Contextual AI Triage**: A Strands triage agent running on AgentCore Runtime & Bedrock scores findings against business exposure, applying deterministic guardrails to prevent hallucinated severity or unlawful dismissals.
+- **Continuous CI/CD Gating**: At every release, **AWS Security Agent (Amazon Continuum)** automatically tests deployed increments in staging, blocking promotion if P1/P2 vulnerabilities are uncovered.
+- **Contextual AI Triage**: A Strands triage agent backed by **Amazon Bedrock** (`BedrockModel`) scores findings against business exposure, applying deterministic guardrails to prevent hallucinated severity or unlawful dismissals.
 - **Closed-Loop Remediation**: Security Agent generates automated remediation pull requests; post-merge retests cryptographically prove vulnerability closure before closing tickets.
 - **Multi-Tenant Fleet Governance**: Central serverless control plane managing distributed customer accounts, enforcing signed test mandates, verified domains, and task-hour budget caps ($50/hour rate).
+
+The model provider is chosen by one variable, `REMPART_LLM_PROVIDER`: **`bedrock`** in the deployed environment (the Lambda role holds `bedrock:InvokeModel` on the chosen model ARNs, nothing wider), `openai_compat` as the local fallback. The guardrails — deterministic priority matrix, mandatory human validation on Critical/High, prompt-injection isolation — are identical for both, and a monthly LLM budget ceiling falls back to deterministic triage instead of letting the invoice run away. See [HLD § 8](docs/HLD.md).
 
 Detailed architectural specifications: [High-Level Design (HLD)](docs/HLD.md) | [French Functional Specification (Cahier des charges)](docs/cahier-des-charges-tests-intrusion-continu.md).
 
@@ -78,7 +80,8 @@ flowchart LR
     API["API Gateway + Lambda"]
     AUTH["Amazon Cognito (RBAC)"]
     SFN["AWS Step Functions (Orchestrator)"]
-    AGT["Strands Triage Agent (AgentCore + Bedrock)"]
+    AGT["Strands Triage Agent (dispatch_triage Lambda)"]
+    BR["Amazon Bedrock (InvokeModel on chosen models)"]
     DB["DynamoDB (Multi-Tenant Store)"]
   end
 
@@ -89,6 +92,7 @@ flowchart LR
   SFN -- "AssumeRole (ExternalId)" --> ROLE
   ROLE --> SA
   SFN --> AGT
+  AGT -- "bedrock:InvokeModel" --> BR
   PORTAL --> API
   API --> AUTH
   API --> DB
@@ -143,7 +147,7 @@ account, no cost) — regenerate them at any time with
 │   │   ├── common/                 # Models, deterministic priority matrix, budget, authz, store
 │   │   ├── api/                    # HTTP Lambda handlers (Cognito JWT validation, tenant isolation)
 │   │   ├── orchestrator/           # Step Functions tasks, Security Agent client, GitHub ticketing
-│   │   ├── triage/                 # Strands agent on AgentCore Runtime, guardrails, tools
+│   │   ├── triage/                 # Strands agent (Bedrock / OpenAI-compatible), guardrails, tools
 │   │   └── reports/                # Deterministic KPI calculations, HTML/PDF monthly report
 │   └── tests/                      # Fast, zero-network test suite using test doubles (fakes.py)
 ├── iac/

@@ -13,7 +13,7 @@ Small and medium-sized enterprises (SMEs) ship code weekly or daily, yet traditi
 
 **Rempart** transforms application security into a continuous, managed subscription operated by a Managed Service Provider (MSP):
 1. **At every release (CI/CD gate)**: AWS Security Agent autonomously tests deployed increments in staging and halts promotion if severe vulnerabilities appear.
-2. **Contextual automated triage**: A specialized Strands triage agent running on AgentCore Runtime backed by Amazon Bedrock qualifies findings against business criticality, Internet exposure, and data classification.
+2. **Contextual automated triage**: A specialized Strands triage agent backed by Amazon Bedrock qualifies findings against business criticality, Internet exposure, and data classification.
 3. **End-to-end remediation lifecycle**: Security Agent generates automated remediation pull requests, and post-merge automated retests verify closure with cryptographic and test run evidence before closing tickets.
 4. **Multi-tenant MSP governance**: A centralized serverless control plane provisions client environments via infrastructure as code, enforces signed test mandates and verified domains, and caps task-hour expenditure with automatic cutoff.
 
@@ -68,9 +68,9 @@ flowchart LR
     AUTH["Amazon Cognito (RBAC)"]
     SFN["Orchestrator: AWS Step Functions"]
     SCHED["Amazon EventBridge Scheduler"]
-    AGT["Triage Agent: Strands on AgentCore Runtime"]
-    GW["AgentCore Gateway (Context Tools)"]
-    BR["Amazon Bedrock (LLM Reasoning & Synthesis)"]
+    AGT["Triage Agent: Strands (dispatch_triage Lambda)"]
+    GW["Triage Tools (4 read-only + 1 write)"]
+    BR["Amazon Bedrock (InvokeModel, least privilege)"]
     DB["Amazon DynamoDB (Multi-Tenant Store)"]
     S3R["Amazon S3 (Reports & Audit Evidence)"]
     NOTIF["Amazon SES (Notifications)"]
@@ -229,14 +229,45 @@ The control plane assumes the `rempart-operator` role in customer accounts. Conf
 
 ## 8. AI Layer & Guardrails
 
-Rempart pairs the frontier capabilities of AWS Security Agent with an agentic triage system built on Strands Agents, AgentCore Runtime, and Amazon Bedrock.
+Rempart pairs the frontier capabilities of **AWS Security Agent (Amazon Continuum)** with an agentic triage system built on **Strands Agents** and **Amazon Bedrock**.
+
+### 8.0 Model provider — Bedrock in production, OpenAI-compatible as local fallback
+
+The triage agent is a Strands agent; the **model** it talks to is selected by one environment variable, `REMPART_LLM_PROVIDER`:
+
+| Provider | Where | Credentials | Model ids |
+|---|---|---|---|
+| `bedrock` (`BedrockModel`, Strands) | **default in the deployed environment** (CDK sets it on every orchestrator Lambda) | none to manage: the Lambda role carries `bedrock:InvokeModel` / `bedrock:InvokeModelWithResponseStream` | `REMPART_BEDROCK_MODEL_IDS` (comma-separated, e.g. `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`) |
+| `openai_compat` (`OpenAIModel`, Strands) | local development and fallback | `REMPART_LLM_API_KEY` (SSM SecureString in production, local secret file in dev) | `REMPART_LLM_MODELS` |
+
+Design rules that the code enforces:
+
+- **Least privilege on the model**: the Bedrock grant is limited to the
+  `foundation-model` ARNs of the chosen models — never `Resource: "*"`, never
+  an extra action (`backend/tests/iac/test_least_privilege.py`).
+- **The guardrails do not depend on the provider**: the deterministic priority
+  matrix, the mandatory human validation for Critical/High, and the prompt-injection
+  isolation apply identically to a Bedrock model and to the local
+  OpenAI-compatible one (`backend/tests/triage/test_llm_provider.py`).
+- **A monthly LLM budget ceiling**: tokens are measured on Strands
+  (`accumulated_usage`), never estimated; when `REMPART_LLM_MONTHLY_USD_BUDGET`
+  or `REMPART_LLM_MONTHLY_TOKEN_BUDGET` is reached, the model is no longer
+  constructed and the deterministic triage takes over — the service is never
+  interrupted (`rempart/triage/llm_budget.py`).
+
+> **Proof status (15 November 2026):** the code path is implemented and tested,
+> and the model that will answer is Amazon Bedrock in the deployed environment.
+> The **first real runtime call to an AWS AI service** is the Continuum
+> penetration test scheduled on **23 November 2026** and is tracked in
+> [issue #36](https://github.com/Tradoooo/rempart/issues/36). Until its redacted
+> evidence is filed, no live call is claimed here.
 
 ### 8.1 Strands Triage Agent
-The triage agent executes through AgentCore Runtime with strictly defined tools exposed via AgentCore Gateway:
+The triage agent is a **Strands** agent executed by the `dispatch_triage` orchestrator Lambda, with a strictly defined tool set:
 - `get_application_context`: Retrieves business criticality, internet exposure, and handled data categories.
 - `search_known_findings`: Looks up historical findings to detect duplicates or patterns.
 - `get_past_decisions`: Ingests past analyst decisions for contextual consistency.
-- `submit_triage_proposal`: Emits the structured triage recommendation.
+- `submit_triage_proposal`: Emits the structured triage recommendation — the **only** write tool.
 
 ### 8.2 Guardrails & Deterministic Verification
 
@@ -288,9 +319,9 @@ Rempart implements strict cost governance:
        ├── DynamoDB Tables (KMS encrypted)         ├── rempart-operator IAM Role
        ├── Cognito User Pool & Groups              ├── GitHub Actions OIDC Role
        ├── API Gateway HTTP API + Lambda           ├── CloudWatch Log Groups
-       ├── Step Functions Orchestrator             └── AWS Budgets Alerts
-       ├── Strands / AgentCore Gateway
-       └── S3 + CloudFront Portal
+        ├── Step Functions Orchestrator             └── AWS Budgets Alerts
+        ├── Strands Triage Agent (Lambda) + Bedrock InvokeModel
+        └── S3 + CloudFront Portal
 ```
 
 - **MSP Control Plane**: Synthesized and deployed via AWS CDK (`iac/control-plane`). Provisioned in under 15 minutes.

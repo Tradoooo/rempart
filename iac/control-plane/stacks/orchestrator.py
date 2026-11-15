@@ -54,6 +54,22 @@ TASK_NAMES = (
 #: Variable qui porte le NOM du paramètre SSM de la clé du modèle (jamais la valeur).
 LLM_KEY_PARAM_ENV = "REMPART_LLM_API_KEY_SSM_PARAM"
 
+#: Fournisseur du modèle de triage. En déployé, c'est Bedrock : pas de clé à
+#: gérer, le rôle de la Lambda porte `bedrock:InvokeModel` sur les seuls ARN de
+#: modèles choisis. `openai_compat` (InferHub) reste le repli local.
+LLM_PROVIDER_ENV = "REMPART_LLM_PROVIDER"
+LLM_PROVIDER_BEDROCK = "bedrock"
+LLM_PROVIDER_OPENAI_COMPAT = "openai_compat"
+
+#: Identifiants de modèles Bedrock, séparés par des virgules. Doit rester
+#: cohérent avec `rempart.triage.llm.DEFAULT_BEDROCK_MODEL_IDS` (un test le
+#: vérifie) : le CDK ne peut pas importer le backend.
+BEDROCK_MODEL_IDS_ENV = "REMPART_BEDROCK_MODEL_IDS"
+DEFAULT_BEDROCK_MODEL_IDS = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+#: Actions Bedrock accordées au rôle du triage — rien d'autre.
+BEDROCK_ACTIONS = ("bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream")
+
 POLL_INTERVAL_SECONDS = 60
 # 240 x 60 s = 4 h of polling (ENF-PERF-01, cahier des charges 11.4).
 MAX_POLL_ITERATIONS = 240
@@ -113,6 +129,7 @@ class OrchestratorStack(cdk.Stack):
             name: self._create_task_lambda(name, common_env, tables) for name in TASK_NAMES
         }
         self._grant_llm_key_read()
+        self._grant_bedrock_invoke()
         # Alias explicite : la decouverte est planifiee toutes les 5 min.
         self.discovery_lambda = self.lambdas["discover_runs"]
         # EF-COR-06 : balayeur des echeances, planifie toutes les heures.
@@ -161,13 +178,24 @@ class OrchestratorStack(cdk.Stack):
     def _llm_env(self) -> dict[str, str]:
         """Variables du modèle de triage (EF-TRI-01).
 
-        L'endpoint et la liste de modèles sont publics ; la **clé** vient d'un
-        paramètre SSM SecureString lu par la Lambda (`rempart.triage.llm`), donc
-        elle n'apparaît jamais dans le template ni dans la configuration de la
-        fonction. Sans paramètre fourni, aucune clé n'est lue et le triage
-        garde son repli déterministe — la démo reste donc gratuite.
+        Le **fournisseur** est Bedrock dans l'environnement déployé
+        (`REMPART_LLM_PROVIDER=bedrock`) : le rôle de la Lambda porte
+        `bedrock:InvokeModel` sur les ARN de modèles choisis, sans clé à
+        gérer. Le repli local (`openai_compat`, endpoint OpenAI-compatible)
+        reste disponible : l'endpoint et la liste de modèles sont publics ; la
+        **clé** vient d'un paramètre SSM SecureString lu par la Lambda
+        (`rempart.triage.llm`), donc elle n'apparaît jamais dans le template ni
+        dans la configuration de la fonction. Sans paramètre fourni, aucune clé
+        n'est lue et le triage garde son repli déterministe — la démo reste
+        donc gratuite.
         """
         env = {
+            "REMPART_LLM_PROVIDER": os.environ.get(
+                LLM_PROVIDER_ENV, LLM_PROVIDER_BEDROCK
+            ),
+            "REMPART_BEDROCK_MODEL_IDS": os.environ.get(
+                BEDROCK_MODEL_IDS_ENV, DEFAULT_BEDROCK_MODEL_IDS
+            ),
             "REMPART_LLM_BASE_URL": os.environ.get(
                 "REMPART_LLM_BASE_URL", "https://api.inferhub.dev/v1"
             ),
@@ -188,6 +216,33 @@ class OrchestratorStack(cdk.Stack):
             # template ni dans la configuration de la fonction.
             env[LLM_KEY_PARAM_ENV] = parameter
         return env
+
+    def _grant_bedrock_invoke(self) -> None:
+        """Droits Bedrock du seul Lambda qui trie, bornés aux modèles choisis.
+
+        `bedrock:InvokeModel` et `bedrock:InvokeModelWithResponseStream` sur
+        les ARN `foundation-model` de la liste : **jamais** de `Resource: "*"`,
+        jamais d'action d'un autre service. Le rôle du plan de contrôle n'a
+        ainsi aucun droit Bedrock en dehors des modèles que l'on a choisis.
+        """
+        triage = self.lambdas.get("dispatch_triage")
+        if triage is None:
+            return
+        raw = os.environ.get(BEDROCK_MODEL_IDS_ENV, DEFAULT_BEDROCK_MODEL_IDS)
+        model_ids = [part.strip() for part in raw.split(",") if part.strip()]
+        if not model_ids:
+            return
+        resources = [
+            f"arn:aws:bedrock:{self.region}::foundation-model/{model_id}"
+            for model_id in model_ids
+        ]
+        triage.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="RempartBedrockInvoke",
+                actions=list(BEDROCK_ACTIONS),
+                resources=resources,
+            )
+        )
 
     def _grant_llm_key_read(self) -> None:
         """Droit de lire la clé du modèle, au seul Lambda qui trie.
